@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Drive Image Downloader</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f4f5f7; }
+    .container { max-width: 640px; margin: 0 auto; background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+    h1 { margin-top: 0; }
+    input[type=file] { display: block; margin-bottom: 16px; }
+    button { background: #0366d6; color: #fff; border: none; padding: 12px 18px; border-radius: 6px; cursor: pointer; }
+    button:disabled { background: #94b3ff; cursor: not-allowed; }
+    pre { background: #f1f5f9; padding: 16px; overflow: auto; border-radius: 8px; }
+    .notice { margin-bottom: 16px; padding: 12px; border-radius: 8px; background: #e2e8f0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Drive Image Downloader</h1>
+    <p class="notice">Upload a text file containing names (one per line). The server will download matching Drive images to local storage.</p>
+    <form id="upload-form">
+      <input type="file" id="file-input" accept=".txt" />
+      <button type="submit" id="submit-button">Upload and Download</button>
+    </form>
+    <div id="status"></div>
+    <pre id="output" hidden></pre>
+  </div>
+  <script>
+    const form = document.getElementById('upload-form');
+    const fileInput = document.getElementById('file-input');
+    const status = document.getElementById('status');
+    const output = document.getElementById('output');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      status.textContent = '';
+      output.hidden = true;
+
+      const file = fileInput.files[0];
+      if (!file) {
+        status.textContent = 'Please choose a .txt file to upload.';
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+      document.getElementById('submit-button').disabled = true;
+      status.textContent = 'Uploading file...';
+
+      try {
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const text = await response.text();
+        let data;
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch (parseError) {
+          status.textContent = `Upload failed: ${response.status} ${response.statusText}`;
+          output.textContent = text || parseError.message;
+          output.hidden = false;
+          return;
+        }
+
+        if (!response.ok) {
+          status.textContent = 'Upload failed: ' + (data.error || response.statusText);
+          output.textContent = JSON.stringify(data, null, 2);
+          output.hidden = false;
+          return;
+        }
+
+        status.textContent = 'Upload successful. Processing started.';
+        output.textContent = JSON.stringify(data, null, 2);
+        output.hidden = false;
+      } catch (err) {
+        status.textContent = 'Request error: ' + err.message;
+      } finally {
+        document.getElementById('submit-button').disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
