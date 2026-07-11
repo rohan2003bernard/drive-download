@@ -32,7 +32,6 @@ build/
 # Environment files
 .env
 .env
-client_secrets.json
 
 # OS files
 .DS_Store
@@ -50,3 +49,5 @@ Thumbs.db
 # Uploads and downloads
 uploads/
 downloads/
+
+client_secrets.json

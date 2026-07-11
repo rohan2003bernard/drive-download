@@ -29,7 +29,7 @@ export default function Home() {
     setStatus('Uploading file...');
     setProgress(10);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://dork-egotism-alive.ngrok-free.dev';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiUrl}/api/upload`, {
         method: 'POST',
         body: formData,

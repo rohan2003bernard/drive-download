@@ -23,7 +23,7 @@ export default function CopyFolderPage() {
     setStatus('Copying folder...');
     setProgress(10);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://dork-egotism-alive.ngrok-free.dev';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiUrl}/api/copy-folder`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

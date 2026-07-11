@@ -18,7 +18,8 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_FOLDER = BASE_DIR / "uploads"
 OUTPUT_FOLDER = Path(os.getenv("OUTPUT_DIR", "downloads"))
-SERVICE_ACCOUNT_FILE = Path(os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "client_secrets.json"))
+SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "client_secrets.json")
+SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
 FOLDER_ID = os.getenv("DRIVE_FOLDER_ID")
 ALLOWED_EXTENSIONS = {"txt"}
 
@@ -38,6 +39,20 @@ app.add_middleware(
 
 def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def get_service_account_args() -> dict:
+    if SERVICE_ACCOUNT_JSON:
+        return {"service_account_json": SERVICE_ACCOUNT_JSON}
+    if SERVICE_ACCOUNT_FILE:
+        service_account_path = Path(SERVICE_ACCOUNT_FILE)
+        if not service_account_path.exists():
+            raise HTTPException(status_code=500, detail=f"Service account file not found: {service_account_path}")
+        return {"service_account_file": str(service_account_path)}
+    raise HTTPException(
+        status_code=500,
+        detail="Google service account credentials are not configured. Set GOOGLE_SERVICE_ACCOUNT_FILE or GOOGLE_SERVICE_ACCOUNT_JSON.",
+    )
 
 
 def create_batch_output_dir(prefix: str, target_path: Optional[str] = None) -> Path:
@@ -66,8 +81,6 @@ async def upload_names(file: UploadFile = File(...), target_path: Optional[str] 
 
     if not FOLDER_ID:
         raise HTTPException(status_code=500, detail="DRIVE_FOLDER_ID is not configured in .env")
-    if not SERVICE_ACCOUNT_FILE.exists():
-        raise HTTPException(status_code=500, detail=f"Service account file not found: {SERVICE_ACCOUNT_FILE}")
 
     upload_path = UPLOAD_FOLDER / Path(file.filename).name
     contents = await file.read()
@@ -79,7 +92,7 @@ async def upload_names(file: UploadFile = File(...), target_path: Optional[str] 
             names_file=str(upload_path),
             output_dir=str(batch_dir),
             folder_id=FOLDER_ID,
-            service_account_file=str(SERVICE_ACCOUNT_FILE),
+            **get_service_account_args(),
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -103,10 +116,7 @@ async def copy_folder(payload: Optional[dict] = Body(None)):
         raise HTTPException(status_code=400, detail="Drive folder link is required")
 
     folder_id = parse_drive_folder_id(link)
-    if not SERVICE_ACCOUNT_FILE.exists():
-        raise HTTPException(status_code=500, detail=f"Service account file not found: {SERVICE_ACCOUNT_FILE}")
-
-    service = build_service(service_account_file=str(SERVICE_ACCOUNT_FILE))
+    service = build_service(**get_service_account_args())
     target_path = payload.get("target_path") if payload else None
     batch_dir = create_batch_output_dir("drive_folder", target_path=target_path)
     try:
@@ -143,3 +153,17 @@ async def download_file(path: str, batch: str):
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/check-folder")
+async def check_folder(folder_id: str):
+    """Diagnostic endpoint: return Drive file metadata for a given `folder_id`.
+
+    Use this to confirm the ID exists and whether the service account can access it.
+    """
+    try:
+        service = build_service(**get_service_account_args())
+        meta = service.files().get(fileId=folder_id, fields="id,name,mimeType", supportsAllDrives=True).execute()
+        return {"ok": True, "meta": meta}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}

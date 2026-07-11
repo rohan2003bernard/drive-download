@@ -32,11 +32,13 @@ def load_names(names_file):
     return names
 
 
-def build_service(service_account_file=None, use_oauth=False, client_secrets_file=None, token_file=None):
+def build_service(service_account_file=None, service_account_json=None, use_oauth=False, client_secrets_file=None, token_file=None):
     """Build Drive service using either a service account or OAuth user credentials.
 
     If `use_oauth` is True, `client_secrets_file` must point to OAuth client JSON.
     The resulting credentials are cached in `token_file` (default 'token.json').
+
+    If `service_account_json` is provided, it may be the raw JSON string stored in an env var.
     """
     if use_oauth:
         token_file = token_file or os.getenv("OAUTH_TOKEN_FILE", "token.json")
@@ -60,6 +62,19 @@ def build_service(service_account_file=None, use_oauth=False, client_secrets_fil
             with open(token_file, "w", encoding="utf-8") as fh:
                 fh.write(creds.to_json())
 
+        return build("drive", "v3", credentials=creds, cache_discovery=False)
+
+    # service account JSON content
+    if service_account_json is not None:
+        if isinstance(service_account_json, str):
+            try:
+                info = json.loads(service_account_json)
+            except json.JSONDecodeError:
+                service_account_json = service_account_json.replace("\\n", "\n")
+                info = json.loads(service_account_json)
+        else:
+            info = service_account_json
+        creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
         return build("drive", "v3", credentials=creds, cache_discovery=False)
 
     # service account path
@@ -140,7 +155,7 @@ def list_folder_children(service, folder_id):
 
 
 def download_drive_folder(service, folder_id, output_dir):
-    folder_meta = service.files().get(fileId=folder_id, fields="id,name,mimeType").execute()
+    folder_meta = service.files().get(fileId=folder_id, fields="id,name,mimeType", supportsAllDrives=True).execute()
     if folder_meta.get("mimeType") != "application/vnd.google-apps.folder":
         raise ValueError("Provided ID is not a Drive folder")
 
@@ -248,7 +263,7 @@ def download_file(service, file_meta, out_dir):
         logger.warning("Skipping native Google Drive file type: %s", name)
         return False
 
-    request = service.files().get_media(fileId=file_id)
+    request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
     fh = io.FileIO(out_path, mode="wb")
     downloader = MediaIoBaseDownload(fh, request)
     done = False
@@ -269,13 +284,16 @@ def download_by_names_file(
     output_dir,
     folder_id,
     service_account_file,
+    service_account_json=None,
     use_oauth=False,
     client_secrets_file=None,
     token_file="token.json",
 ):
     if not folder_id:
         raise ValueError("DRIVE_FOLDER_ID is required")
-    if not service_account_file or not os.path.exists(service_account_file):
+    if not service_account_file and service_account_json is None:
+        raise ValueError("Service account credentials are required")
+    if service_account_file and not os.path.exists(service_account_file):
         raise FileNotFoundError(f"Service account file not found: {service_account_file}")
     if not os.path.exists(names_file):
         raise FileNotFoundError(f"Names file not found: {names_file}")
@@ -286,6 +304,7 @@ def download_by_names_file(
 
     service = build_service(
         service_account_file=service_account_file,
+        service_account_json=service_account_json,
         use_oauth=use_oauth,
         client_secrets_file=client_secrets_file,
         token_file=token_file,
@@ -367,6 +386,7 @@ def main():
     parser.add_argument(
         "--service-account-file", default=os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
     )
+    parser.add_argument("--service-account-json", default=os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"), help="Raw service account JSON from environment")
     parser.add_argument("--use-oauth", action="store_true", help="Use OAuth user consent flow instead of service account")
     parser.add_argument("--client-secrets", default=os.getenv("GOOGLE_OAUTH_CLIENT_SECRETS"), help="Path to OAuth client_secrets JSON")
     parser.add_argument("--token-file", default=os.getenv("OAUTH_TOKEN_FILE", "token.json"), help="Path to cache OAuth token JSON")
@@ -378,6 +398,7 @@ def main():
             args.output_dir,
             args.folder_id,
             args.service_account_file,
+            service_account_json=args.service_account_json,
             use_oauth=args.use_oauth,
             client_secrets_file=args.client_secrets,
             token_file=args.token_file,

@@ -4,7 +4,7 @@ Quick script and server to download images from a Google Drive folder by providi
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and fill `GOOGLE_SERVICE_ACCOUNT_FILE` and `DRIVE_FOLDER_ID`.
+1. Copy `.env.example` to `.env` and fill `GOOGLE_SERVICE_ACCOUNT_FILE` or `GOOGLE_SERVICE_ACCOUNT_JSON`, and `DRIVE_FOLDER_ID`.
 2. Install dependencies:
 
 ```bash
@@ -57,7 +57,7 @@ npm run dev
 4. Open the frontend in a browser:
 
 ```text
-http://localhost:3000
+http://localhost:8000
 ```
 If the app is hosted remotely, use:
 
